@@ -159,18 +159,6 @@ if __name__ == "__main__": \
     d = [h1, 0.0, 0.0]
     alpha = [alpha1, 0.0, 0.0]
 
- # PART (2b): Fill in what you need to run part (2b) and return the final transform from the base frame
- # to the end-point frame. I have added some code here to get you started.
-
-    theta = [0.0, 0.0, 0.0]  # All joint angles set to 0 for part (2b)
-
-    dh_paras = np.array([alpha, a, d]).T
-    q0 = [0.0, 0.0, 0.0]
-    T0 = fk_calc(q0, dh_paras, 3)
-
-    print("Final transformation matrix when all joint angles are 0:")
-    print(T0)
-
  # PART (2c): Fill in what you need to run part (2c) and plot the end-point position as all three joints
  # move from 0 to pi/4.
 
@@ -230,54 +218,3 @@ if __name__ == "__main__": \
 
     plt.show()
 
- # Part (3c): Fill in what you need to run part (3c) and compare the two Jacobian functions you have created.
- # I recommend testing them at the 0 position first and then trying others positions. Testing 3-5 positions is sufficient.
- # Remember to use your dh() and fk_calc() functions as needed.
-
-    dh_paras = np.array([alpha, a, d]).T
-    q = np.array([0.0, 0.0, 0.0])
-    J = jacobian_fromVP(q, dh_paras)
-
-    print("Jacobian matrix at joint angles q = [0, 0, 0]:")
-    print(J)
-
- # Part (3d): Fill in what you need to run part (3d) and produce the end-point position and Jacobian for the
- # UR robot at the two requested positions. Remember to use your dh() and fk_calc() functions as needed.
-
-# # Universal Robot DH Parameters
-#     l1 = 0.1519
-#     l2 = 0.24365
-#     l3 = 0.21325
-#     l4 = 0.11235
-#     l5 = 0.08535
-#     l6 = 0.0819
-#
-#     # Correct DH Parameters for the Universal Robot with negative a2 and a3
-#     a = [0, -l2, -l3, 0, 0, 0]
-#     d = [l1, 0, 0, l4, l5, l6]
-#     alpha = [np.pi / 2, 0, 0, np.pi / 2, -np.pi / 2, 0]
-#
-#     dh_paras = np.array([alpha, a, d]).T
-#
-#     # Position 1: All joint angles set to 0
-#     q1 = np.array([0, 0, 0, 0, 0, 0])
-#
-#     # Position 2: q = [0, pi/3, pi/3, 0, pi/4, 0]
-#     q2 = np.array([0, np.pi / 3, np.pi / 3, 0, np.pi / 4, 0])
-#
-#     # Compute the forward kinematics and Jacobian for both positions
-#     print("Position 1: Joint angles set to [0, 0, 0, 0, 0, 0]")
-#     T1 = fk_calc(q1, dh_paras, 6)
-#     J1 = jacobianMoreJoints(q1, dh_paras, 6)
-#     print("End-effector position (T1):")
-#     print(T1[0:3, 3])  # Extract end-effector position
-#     print("Jacobian at Position 1:")
-#     print(J1)
-#
-#     print("\nPosition 2: Joint angles set to [0, pi/3, pi/3, 0, pi/4, 0]")
-#     T2 = fk_calc(q2, dh_paras, 6)
-#     J2 = jacobianMoreJoints(q2, dh_paras, 6)
-#     print("End-effector position (T2):")
-#     print(T2[0:3, 3])  # Extract end-effector position
-#     print("Jacobian at Position 2:")
-#     print(J2)
