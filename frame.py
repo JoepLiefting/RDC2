@@ -132,9 +132,25 @@ class Frame:
         - angle: float, the rotation angle in radians.
         """
         R = self.matrix[0:3, 0:3]
-        #Include the algorithm for computing the axis and angle from a rotation matrix
+        epsilon = 1e-6
 
-        return #axis and angle
+        tr = np.trace(R)
+        cos_theta = (tr - 1) / 2
+        cos_theta = np.clip(cos_theta, -1.0, 1.0)
+        theta = np.arccos(cos_theta)
+        sin_theta = np.sqrt(1 - cos_theta**2)
+
+        if sin_theta > epsilon:
+            rx = (R[2,1] - R[1,2]) / (2*sin_theta)
+            ry = (R[0,2] - R[2,0]) / (2*sin_theta)
+            rz = (R[1,0] - R[0,1]) / (2*sin_theta)
+            axis = np.array([rx, ry, rz])
+            axis = axis / np.linalg.norm(axis)
+        else:
+            # Angle is close to 0, axis not well-defined
+            axis = np.array([0, 0, 0])
+
+        return axis, theta
 
     def to_quaternion(self):
         """
@@ -144,14 +160,34 @@ class Frame:
         - q: numpy array of shape (4,), the quaternion [w, x, y, z]
         """
         R = self.matrix[0:3, 0:3]
+        tr = np.trace(R)
+        if tr > 0:
+            S = np.sqrt(tr + 1.0) * 2  # S=4*qw
+            qw = 0.25 * S
+            qx = (R[2,1] - R[1,2]) / S
+            qy = (R[0,2] - R[2,0]) / S
+            qz = (R[1,0] - R[0,1]) / S
+        else:
+            if (R[0,0] > R[1,1]) and (R[0,0] > R[2,2]):
+                S = np.sqrt(1.0 + R[0,0] - R[1,1] - R[2,2]) * 2  # S=4*qx
+                qw = (R[2,1] - R[1,2]) / S
+                qx = 0.25 * S
+                qy = (R[0,1] + R[1,0]) / S
+                qz = (R[0,2] + R[2,0]) / S
+            elif R[1,1] > R[2,2]:
+                S = np.sqrt(1.0 + R[1,1] - R[0,0] - R[2,2]) * 2  # S=4*qy
+                qw = (R[0,2] - R[2,0]) / S
+                qx = (R[0,1] + R[1,0]) / S
+                qy = 0.25 * S
+                qz = (R[1,2] + R[2,1]) / S
+            else:
+                S = np.sqrt(1.0 + R[2,2] - R[0,0] - R[1,1]) * 2  # S=4*qz
+                qw = (R[1,0] - R[0,1]) / S
+                qx = (R[0,2] + R[2,0]) / S
+                qy = (R[1,2] + R[2,1]) / S
+                qz = 0.25 * S
 
-        # Compute the components of the quaternion
-        #
-        #
-        #
-
-        q = np.array([qw, qx, qy, qz]) #put the pieces together
-        # Normalize the quaternion
+        q = np.array([qw, qx, qy, qz])
         q = q / np.linalg.norm(q)
         return q
 
@@ -163,13 +199,18 @@ class Frame:
         - quaternion: array-like of shape (4,), the quaternion [w, x, y, z]
         """
         qw, qx, qy, qz = quaternion
-
         # Normalize the quaternion
         norm = np.linalg.norm(quaternion)
-
+        if norm == 0:
+            raise ValueError("Zero-length quaternion")
         qw, qx, qy, qz = quaternion / norm
+
         # Compute the rotation matrix
-        R = np.array([ ])
+        R = np.array([
+            [1 - 2*(qy**2 + qz**2), 2*(qx*qy - qz*qw),     2*(qx*qz + qy*qw)],
+            [2*(qx*qy + qz*qw),     1 - 2*(qx**2 + qz**2), 2*(qy*qz - qx*qw)],
+            [2*(qx*qz - qy*qw),     2*(qy*qz + qx*qw),     1 - 2*(qx**2 + qy**2)]
+        ])
         self.matrix[0:3, 0:3] = R
 
     def set_rotation_from_axis_angle(self, axis, angle):
@@ -184,178 +225,137 @@ class Frame:
         if np.linalg.norm(axis) == 0:
             raise ValueError("Zero-length axis vector")
         axis = axis / np.linalg.norm(axis)  # Ensure the axis is a unit vector
-        #
-        #
-        #
-        #
-        #
-
+        x, y, z = axis
+        c = np.cos(angle)
+        s = np.sin(angle)
+        C = 1 - c
         # Compute the rotation matrix
-        R = np.array([])
+        R = np.array([
+            [c + x*x*C,     x*y*C - z*s, x*z*C + y*s],
+            [y*x*C + z*s,   c + y*y*C,   y*z*C - x*s],
+            [z*x*C - y*s,   z*y*C + x*s, c + z*z*C]
+        ])
         self.matrix[0:3, 0:3] = R
 
     def calc_rot_error(self, frame):
         """
-        Calculate the difference or error between the current frame
-        and some other reference frame
+        Calculate the rotational error between the current frame
+        and a reference frame.
 
         Parameters:
-        -frame: reference frame (must be another frame object)
+        - frame: Frame object (reference frame).
 
         Returns:
-        -error in radians as numpy array of shape (3,).
+        - error: tuple (axis, angle) where:
+            - axis: numpy array of shape (3,), the axis of rotation.
+            - angle: float, the rotation angle in radians.
         """
+        # Step 1: Calculate the relative rotation matrix
+        R1 = self.matrix[0:3, 0:3]  # Current frame rotation matrix
+        R2 = frame.matrix[0:3, 0:3]  # Reference frame rotation matrix
+        R_err = R2 @ R1.T  # Relative rotation matrix
 
-        return err
+        # Step 2: Compute the angle of rotation (theta)
+        cos_theta = (np.trace(R_err) - 1) / 2
+        cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Clipping to avoid numerical errors
+        theta = np.arccos(cos_theta)  # Angle in radians
 
+        # Step 3: Compute the axis of rotation (r)
+        if np.sin(theta) > 1e-6:  # Avoid division by zero
+            rx = (R_err[2, 1] - R_err[1, 2]) / (2 * np.sin(theta))
+            ry = (R_err[0, 2] - R_err[2, 0]) / (2 * np.sin(theta))
+            rz = (R_err[1, 0] - R_err[0, 1]) / (2 * np.sin(theta))
+            axis = np.array([rx, ry, rz])
+            axis = axis / np.linalg.norm(axis)  # Normalize the axis
+        else:
+            # If angle is very small, axis is not well-defined
+            axis = np.array([0, 0, 0])
 
+        return axis, theta
 
+# Task (b)
+# Create a frame that is rotated 20 degrees about x and 25 degrees in z
+# and is then translated from the origin to point (1,3,5).
+frame_b = Frame('Frame B')
+frame_b.rotate('x', np.deg2rad(20), relative_to='origin')
+frame_b.rotate('z', np.deg2rad(25), relative_to='origin')
+frame_b.translate(dx=1, dy=3, dz=5, relative_to='origin')
 
+# Compute the homogeneous transform
+print("Homogeneous Transformation Matrix of Frame B:")
+frame_b.print_matrix()
 
-    def __repr__(self):
-        """
-        String representation of the Frame object.
-        """
-        return f"Frame(name='{self.name}', size={self.size})"
+# Convert its rotation matrix to quaternion
+q = frame_b.to_quaternion()
+print("\nQuaternion representation of Frame B rotation:")
+print(q)
 
-# Additional functions
-def quaternion_mul(q1, q2):
-    """
-    Multiply two quaternions.
-    """
-    w1, x1, y1, z1 = q1
-    w2, x2, y2, z2 = q2
-    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
-    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
-    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
-    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
-    return np.array([w, x, y, z])
+# Convert its rotation matrix to axis and angle
+axis, angle = frame_b.to_axis_angle()
+print("\nAxis-Angle representation of Frame B rotation:")
+print(f"Axis: {axis}")
+print(f"Angle (radians): {angle}")
+print(f"Angle (degrees): {np.degrees(angle)}")
 
-def quaternion_conj(q):
-    """
-    Calculate the conjugate of a quaternion.
-    """
-    return np.array([q[0], -q[1], -q[2], -q[3]])
+# Confirm that you can also convert back to your original homogeneous transform.
+# Using quaternion
+frame_q = Frame('Frame from Quaternion')
+frame_q.set_rotation_from_quaternion(q)
+frame_q.translate(dx=1, dy=3, dz=5, relative_to='origin')
 
-def relative_quat(q_1, q_2):
-    q_1_conj = np.array([q_1[0], -q_1[1], -q_1[2], -q_1[3]])
-    q_rel = quaternion_mul(q_1_conj, q_2)
-    return (q_rel / np.linalg.norm(q_rel))
+print("\nFrame from Quaternion Transformation Matrix:")
+frame_q.print_matrix()
 
-def slerp(q0, q1, t):
-    """
-    Perform Spherical Linear Interpolation between two quaternions.
-    """
-    dot = np.dot(q0, q1)
-    if dot < 0.0:
-        q1 = -q1
-        dot = -dot
-    DOT_THRESHOLD = 0.9995
-    if dot > DOT_THRESHOLD:
-        # Quaternions are close; use linear interpolation
-        result = q0 + t * (q1 - q0)
-        return result / np.linalg.norm(result)
-    theta_0 = np.arccos(dot)
-    sin_theta_0 = np.sin(theta_0)
-    theta_t = theta_0 * t
-    sin_theta_t = np.sin(theta_t)
-    s0 = np.sin(theta_0 - theta_t) / sin_theta_0
-    s1 = sin_theta_t / sin_theta_0
-    result = s0 * q0 + s1 * q1
-    return result
+# Using axis-angle
+frame_aa = Frame('Frame from Axis-Angle')
+frame_aa.set_rotation_from_axis_angle(axis, angle)
+frame_aa.translate(dx=1, dy=3, dz=5, relative_to='origin')
 
-def plot_frames(frames, ax=None, show=True, equal_axes=True):
-    """
-    Plot multiple frames in 3D.
+print("\nFrame from Axis-Angle Transformation Matrix:")
+frame_aa.print_matrix()
 
-    Parameters:
-    - frames: list of Frame objects to plot.
-    - ax: matplotlib axes object. If None, a new figure and axes are created.
-    - show: bool, whether to display the plot immediately.
-    - equal_axes: bool, whether to set equal scaling for all axes.
-    """
-    if ax is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-    else:
-        fig = plt.gcf()
+# Verify that the matrices are the same
+print("\nDifference between original Frame B and Frame from Quaternion:")
+print(frame_b.matrix - frame_q.matrix)
 
-    for frame in frames:
-        origin = frame.matrix[0:3, 3]
-        x_axis = frame.matrix @ np.array([frame.size, 0, 0, 1])
-        y_axis = frame.matrix @ np.array([0, frame.size, 0, 1])
-        z_axis = frame.matrix @ np.array([0, 0, frame.size, 1])
+print("\nDifference between original Frame B and Frame from Axis-Angle:")
+print(frame_b.matrix - frame_aa.matrix)
 
-        ax.quiver(origin[0], origin[1], origin[2],
-                  x_axis[0]-origin[0], x_axis[1]-origin[1], x_axis[2]-origin[2],
-                  color='r', length=frame.size, normalize=False)
-        ax.quiver(origin[0], origin[1], origin[2],
-                  y_axis[0]-origin[0], y_axis[1]-origin[1], y_axis[2]-origin[2],
-                  color='g', length=frame.size, normalize=False)
-        ax.quiver(origin[0], origin[1], origin[2],
-                  z_axis[0]-origin[0], z_axis[1]-origin[1], z_axis[2]-origin[2],
-                  color='b', length=frame.size, normalize=False)
+# Task (c)
+# Test calc_rot_error() with a range of different rotations from 2 degrees to 100 degrees
+angles_deg = np.arange(2, 101, 2)
+errors = []
 
-    if equal_axes:
-        # Set equal aspect ratio for all axes
-        limits = np.array([ax.get_xlim(), ax.get_ylim(), ax.get_zlim()])
-        min_limit = limits[:,0].min()
-        max_limit = limits[:,1].max()
-        ax.set_xlim(min_limit, max_limit)
-        ax.set_ylim(min_limit, max_limit)
-        ax.set_zlim(min_limit, max_limit)
-        ax.set_box_aspect([1,1,1])  # For matplotlib >= 3.3.0
+frame_static = Frame('Static Frame')
 
-    if show:
-        plt.show()
-    else:
-        return fig, ax
+for angle_deg in angles_deg:
+    frame_rotated = Frame('Rotated Frame')
+    frame_rotated.rotate('z', np.deg2rad(angle_deg), relative_to='origin')
+    axis, error_angle = frame_rotated.calc_rot_error(frame_static)
+    errors.append(np.degrees(error_angle))  # Store the error in degrees
 
-def draw_vector(frame_from, frame_to, color='k', ax=None):
-    """
-    Draw a connecting vector (arrow) from one frame to another.
-
-    Parameters:
-    - frame_from: Frame object, the starting frame.
-    - frame_to: Frame object, the ending frame.
-    - color: str, color of the vector.
-    - ax: matplotlib axes object.
-    """
-    if ax is None:
-        ax = plt.gca()
-    origin = frame_from.matrix[0:3, 3]
-    target = frame_to.matrix[0:3, 3]
-    delta = target - origin
-    ax.quiver(origin[0], origin[1], origin[2],
-              delta[0], delta[1], delta[2],
-              color=color, arrow_length_ratio=0.1, linewidth=1)
-
-
-
-
-# Just some examples for creating and plotting frames
-
-# Create the origin frame and a few other frames
-origin_frame = Frame('Origin', size=1.0)
-frame_test = Frame('test frame', size=0.75)
-frame_ref = frame_test.copy()
-
-#Move some things around
-frame_test.rotate('z', np.deg2rad(90), relative_to=origin_frame)
-frame_test.translate(dx=1.5, relative_to='origin')
-frame_ref.translate(dx=1, relative_to='origin')
-
-#Print some things
-frame_ref.print_matrix()
-frame_test.print_matrix()
-
-#Make a new frame and give it the homogenous transformation matrix
-#of an existing frame
-newFrame = Frame('new frame', size=0.75)
-newFrame.set_transform(frame_test.matrix)
-newFrame.print_matrix()
-
-#Plot the frames
-frames = [origin_frame, frame_test, frame_ref]
-fig, ax = plot_frames(frames, show=False)
+# Plot the rotational error
+plt.figure()
+plt.plot(angles_deg, errors, 'b-o', label='Computed Rotational Error')
+plt.xlabel('Rotation Angle (degrees)')
+plt.ylabel('Rotational Error (degrees)')
+plt.title('Rotational Error vs Rotation Angle')
+plt.legend()
+plt.grid(True)
 plt.show()
+
+# Plot the absolute difference between computed error and expected rotation angle
+expected_errors_deg = angles_deg % 360
+difference = np.abs(errors - expected_errors_deg)
+
+plt.figure()
+plt.plot(angles_deg, difference, 'm-o')
+plt.xlabel('Rotation Angle (degrees)')
+plt.ylabel('Absolute Error (degrees)')
+plt.title('Absolute Difference Between Computed Error and Actual Rotation Angle')
+plt.grid(True)
+plt.show()
+
+# Analysis of accuracy
+print("Maximum absolute error in degrees:", np.max(difference))
+print("Mean absolute error in degrees:", np.mean(difference))

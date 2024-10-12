@@ -161,16 +161,16 @@ if __name__ == "__main__": \
 
     dh_paras = np.array([alpha, a, d]).T
     q = np.array([0.0, 0.0, 0.0])
-    J = jacobian_fromVP(q, dh_paras)
+    J1 = jacobian_fromVP(q, dh_paras)
 
     print("Jacobian matrix by using jacobian_fromVP() at joint angles q = [0, 0, 0]:")
-    print(J)
+    print(J1)
 
  # Part (3c): Fill in what you need to run part (3c) and compare the two Jacobian functions you have created.
  # I recommend testing them at the 0 position first and then trying others positions. Testing 3-5 positions is sufficient.
  # Remember to use your dh() and fk_calc() functions as needed.
 
-    J = jacobianMoreJoints(q, dh_paras, numjoints=3)
+    J2 = jacobianMoreJoints(q, dh_paras, numjoints=3)
 
     print("Jacobian matrix by using jacobianMoreJoints() at joint angles q = [0, 0, 0]:")
-    print(J)
+    print(J2)
