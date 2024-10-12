@@ -1,29 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-"""
-Author: J. Micah Prendergast
-Date: 01-10-2024
-
-This is a library for creating, plotting and manipulating reference frames. It contains the Frame class
-along with various methods you can call to on these frames to translate them, rotate them, copy them, etc.
-Feel free to play around with some of these frames and see how they work before. There are a few functions
-you will need to modify to get working as I have indicated in your assignment. The functions themselves are
-present but they will not currently run so you can build on that skeleton to get them working. Note: You may 
-want to comment these functions out at first so you can play around with the most basic components even before
-you get everything working.
-
-Below the Frame class,I have also included a few functions for plotting both the frames and vectors between 
-frames. In addition there are several function for working with quaternions. You won't need to use these quaternion 
-functions for your assignment, but they may be fun to play around with, particularly the slerp function. We will
-discuss SLERP in class but we won't have time for you to implement it yourself so I have given you my basic 
-implementation in case you want to try it out in combination with other trajectory planners. 
-
-At the bottom I have made a few examples of basic functionality so that you can see how you might use some 
-of the methods within the Frame class.
-
-"""
-
 class Frame:
     def __init__(self, name, size=1.0):
         """
@@ -258,18 +235,25 @@ class Frame:
         # Step 2: Compute the angle of rotation (theta)
         cos_theta = (np.trace(R_err) - 1) / 2
         cos_theta = np.clip(cos_theta, -1.0, 1.0)  # Clipping to avoid numerical errors
-        theta = np.arccos(cos_theta)  # Angle in radians
 
-        # Step 3: Compute the axis of rotation (r)
-        if np.sin(theta) > 1e-6:  # Avoid division by zero
-            rx = (R_err[2, 1] - R_err[1, 2]) / (2 * np.sin(theta))
-            ry = (R_err[0, 2] - R_err[2, 0]) / (2 * np.sin(theta))
-            rz = (R_err[1, 0] - R_err[0, 1]) / (2 * np.sin(theta))
-            axis = np.array([rx, ry, rz])
-            axis = axis / np.linalg.norm(axis)  # Normalize the axis
+        # Step 3: Handle small angles with precision issues
+        if abs(cos_theta - 1.0) < 1e-6:
+            # Angle is too small, approximate as zero (no rotation)
+            theta = 0.0
+            axis = np.array([0, 0, 0])  # No meaningful rotation axis
         else:
-            # If angle is very small, axis is not well-defined
-            axis = np.array([0, 0, 0])
+            theta = np.arccos(cos_theta)  # Angle in radians
+
+            # Step 4: Compute the axis of rotation (r) only if theta is large enough
+            if np.sin(theta) > 1e-6:  # Avoid division by zero
+                rx = (R_err[2, 1] - R_err[1, 2]) / (2 * np.sin(theta))
+                ry = (R_err[0, 2] - R_err[2, 0]) / (2 * np.sin(theta))
+                rz = (R_err[1, 0] - R_err[0, 1]) / (2 * np.sin(theta))
+                axis = np.array([rx, ry, rz])
+                axis = axis / np.linalg.norm(axis)  # Normalize the axis
+            else:
+                # Angle is very small, axis not well-defined
+                axis = np.array([0, 0, 0])
 
         return axis, theta
 
